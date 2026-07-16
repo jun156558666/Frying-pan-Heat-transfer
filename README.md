@@ -11,6 +11,8 @@
 
 ![上面視温度分布](top_view_distribution.png)
 
+![断面温度分布](cross_section_distribution.png)
+
 ---
 
 ## 解析モデル
