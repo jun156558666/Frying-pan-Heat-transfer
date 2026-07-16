@@ -9,6 +9,8 @@
 | `top_view_distribution.png` | 上面視カラーマップ（底面＋持ち手合成） |
 | `cross_section_distribution.png` | y = 0 断面カラーマップ（板厚方向＋持ち手） |
 
+![上面視温度分布](top_view_distribution.png)
+
 ---
 
 ## 解析モデル
