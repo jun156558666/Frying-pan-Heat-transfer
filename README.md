@@ -106,10 +106,10 @@ $$\frac{T^{n+1} - T^n}{\Delta t} = \mathcal{L}(T^{n+1}) + f$$
 
 **内部節点の差分式**（$\rho c \dot{T} = k \nabla^2 T$）：
 
-$$\frac{\rho c}{\Delta t} T_{i,j}^{n+1} + \frac{2k}{\Delta x^2} T_{i,j}^{n+1} + \frac{2k}{\Delta y^2} T_{i,j}^{n+1}
-- \frac{k}{\Delta x^2}(T_{i-1,j}^{n+1}+T_{i+1,j}^{n+1})
-- \frac{k}{\Delta y^2}(T_{i,j-1}^{n+1}+T_{i,j+1}^{n+1})
-= \frac{\rho c}{\Delta t} T_{i,j}^{n}$$
+$$\begin{aligned}
+&\frac{\rho c}{\Delta t} T_{i,j}^{n+1} + \frac{2k}{\Delta x^2} T_{i,j}^{n+1} + \frac{2k}{\Delta y^2} T_{i,j}^{n+1} \\
+&\quad - \frac{k}{\Delta x^2}(T_{i-1,j}^{n+1}+T_{i+1,j}^{n+1}) - \frac{k}{\Delta y^2}(T_{i,j-1}^{n+1}+T_{i,j+1}^{n+1}) = \frac{\rho c}{\Delta t} T_{i,j}^{n}
+\end{aligned}$$
 
 ### `build_fin(k, rho, c)` — セクション 2
 
@@ -123,9 +123,10 @@ $$\frac{\rho c}{\Delta t} T_{i,j}^{n+1} + \frac{2k}{\Delta x^2} T_{i,j}^{n+1} + 
 
 **フィン方程式**（断面積一様、$m^2 = hP/kA_c$）：
 
-$$\frac{\rho c}{\Delta t}T_i^{n+1} + \frac{hP}{A_c}T_i^{n+1} + \frac{2k}{\Delta x^2}T_i^{n+1}
-- \frac{k}{\Delta x^2}(T_{i-1}^{n+1}+T_{i+1}^{n+1})
-= \frac{\rho c}{\Delta t}T_i^{n} + \frac{hP}{A_c}T_\infty$$
+$$\begin{aligned}
+&\frac{\rho c}{\Delta t}T_i^{n+1} + \frac{hP}{A_c}T_i^{n+1} + \frac{2k}{\Delta x^2}T_i^{n+1} \\
+&\quad - \frac{k}{\Delta x^2}(T_{i-1}^{n+1}+T_{i+1}^{n+1}) = \frac{\rho c}{\Delta t}T_i^{n} + \frac{hP}{A_c}T_\infty
+\end{aligned}$$
 
 ### `run_transient(k, rho, c, h_eff, T_eff)` — セクション 3
 
