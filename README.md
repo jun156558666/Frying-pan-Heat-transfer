@@ -1,17 +1,22 @@
-# `top_view_distribution.py` 解説
+# `cooling_simulation.py` 解説
 
 ## 概要
 
-フライパン（円形底面＋円柱持ち手）の**非定常熱伝導**を数値的に解き、t = 300 s 時点の温度分布を2種類の図で出力するスクリプト。
+フライパン（円形底面＋円柱持ち手）の**非定常熱伝導**を数値的に解き、加熱・冷却の2フェーズにわたる温度分布を出力するスクリプト。
+
+| フェーズ | 時間 | バーナー |
+|---|---|---|
+| 加熱 | t = 0 〜 300 s | ON（q_s = 15000 W/m²） |
+| 冷却 | t = 300 〜 600 s | OFF（自然対流のみ） |
 
 | 出力ファイル | 内容 |
 |---|---|
-| `top_view_distribution.png` | 上面視カラーマップ（底面＋持ち手合成） |
-| `cross_section_distribution.png` | y = 0 断面カラーマップ（板厚方向＋持ち手） |
+| `top_view_300s.png` | 上面視カラーマップ t = 300 s（加熱終了時） |
+| `top_view_600s.png` | 上面視カラーマップ t = 600 s（冷却終了時） |
 
-![上面視温度分布](top_view_distribution.png)
+![加熱終了時（t=300s）](top_view_300s.png)
 
-![断面温度分布](cross_section_distribution.png)
+![冷却終了時（t=600s）](top_view_600s.png)
 
 ---
 
@@ -23,7 +28,7 @@
         │   円形底面 (2D)    │  持ち手    │
         │  FDM (Ny×Nx 格子) │  (1D フィン)│
         └────────────────────┴────────────┘
-        ↑ バーナー加熱 (中央 R_b=50mm)
+        ↑ バーナー加熱 (中央 R_b=50mm、加熱フェーズのみ)
 ```
 
 - **底面**：2次元 Backward Euler 有限差分法（FDM）
@@ -77,9 +82,10 @@
 
 | 項目 | 値 |
 |---|---|
-| 終了時刻 t_end | 300 s |
+| 加熱時間 t_heat | 300 s（3000 ステップ） |
+| 冷却時間 t_cool | 300 s（3000 ステップ） |
+| 合計時間 | 600 s（6000 ステップ） |
 | 時間刻み dt | 0.1 s |
-| タイムステップ数 Nt | 3000 |
 
 ---
 
@@ -99,12 +105,18 @@ $$\frac{T^{n+1} - T^n}{\Delta t} = \mathcal{L}(T^{n+1}) + f$$
 
 ### `build_2D(k, rho, c, h_eff, T_eff)` — セクション 1
 
-2D 底面の係数行列を構築し、LU 分解（`factorized`）して返す。
+2D 底面の係数行列を構築し、LU 分解（`factorized`）して返す。  
+RHS ベクトルをフェーズ別に **2つ** 用意する点が特徴。
+
+| 変数 | 内容 |
+|---|---|
+| `b0_heat` | バーナー ON（j = 0 に q_s フラックス） |
+| `b0_cool` | バーナー OFF（j = 0 は断熱、対流 BC は同じ） |
 
 | 境界 | 処理 |
 |---|---|
-| j = 0（底面、バーナー側） | Neumann BC：フラックス指定（R_b 内は q_s、外はゼロ） |
-| j = Ny-1（上面、空気/水側） | Robin BC：対流放熱 h_eff(T - T_eff) |
+| j = 0（底面、バーナー側） | Neumann BC：加熱時は q_s、冷却時は断熱（ゼロフラックス） |
+| j = Ny-1（上面、空気/水側） | Robin BC：対流放熱 h_eff(T - T_eff)（両フェーズ共通） |
 | i = 0, i = Nx-1（左右端） | 対称 BC（零勾配）：dT/dx = 0 |
 | 内部節点 | 標準的な 2D FDM ステンシル |
 
@@ -134,29 +146,31 @@ $$\begin{aligned}
 
 ### `run_transient(k, rho, c, h_eff, T_eff)` — セクション 3
 
-時間ループ（3000 ステップ）：
+時間ループ（6000 ステップ）。ステップ番号で RHS を切り替える：
 
 ```
-for s in range(Nt):
+for s in range(Nt):  # 0 ~ 5999
+    b0 = b0_heat if s < 3000 else b0_cool   # 300s を境にバーナー OFF
     1. 2D 底面を Backward Euler で更新
     2. 底面右端上面節点 T[Nx-1, Ny-1] を取得（= 持ち手根元温度）
     3. フィンを Backward Euler で更新（根元 = 上記温度）
+    4. s == 2999（t=300s）でスナップショット保存
 ```
 
-戻り値：
-- `T_top_C`：底面上面（j = Ny-1）の温度プロファイル [°C]（長さ Nx）
-- `T_fin_C`：持ち手温度プロファイル [°C]（長さ Nf）
-- `T_field_C`：2D 温度場全体 [°C]（shape: Ny × Nx）
+戻り値（辞書）：
+- `snap[300]`：`(T_top_C, T_fin_C)` — 加熱終了時
+- `snap[600]`：`(T_top_C, T_fin_C)` — 冷却終了時
 
 ---
 
 ## 可視化
 
-### セクション 5：上面視（`top_view_distribution.png`）
+### `plot_top_view(t_snap)` — セクション 6
 
-- 円形底面・長方形持ち手をピクセルグリッド（900 × 450）に投影
-- 底面：半径 R_comp（= 座標の極半径）で `T_top_C` を補間
-- 持ち手：x 方向のみで `T_fin_C` を補間
+円形底面・長方形持ち手をピクセルグリッド（900 × 450）に投影。
+
+- 底面：極半径 R_comp で `T_top_C` を線形補間
+- 持ち手：x 方向のみで `T_fin_C` を線形補間
 - カラーマップ：`jet`（青 → 赤）
 
 主な描画要素：
@@ -164,17 +178,7 @@ for s in range(Nt):
 - 白実線円：底面縁（R = 122 mm）
 - 白実線：持ち手縁
 
-### セクション 6：断面図（`cross_section_distribution.png`）
-
-- x 方向：底面直径（−L 〜 L）＋ 持ち手（L 〜 L + L_h）
-- y 方向：0 〜 d_h/2 = 12.5 mm（上半分、対称を利用）
-- 底面板：`RegularGridInterpolator` で 2D 温度場 T(x, y) を補間
-- 持ち手：x 方向のみ補間（y 方向一様と仮定）
-
-主な描画要素：
-- 白破線縦線：バーナー境界（±R_b）
-- 白実線縦線：底面縁（±L）
-- 白点線横線：底面上面（y = H = 3 mm）
+`t_snap = 300` と `t_snap = 600` の2回呼び出して両ファイルを出力。
 
 ---
 
@@ -184,10 +188,11 @@ for s in range(Nt):
 パラメータ定義
     ↓
 全10条件（5材料 × 2条件）をループで計算・キャッシュ
+  加熱 300s → 冷却 300s、t=300s と t=600s のスナップショットを保存
     ↓
-上面視図を描画・保存 (top_view_distribution.png)
+top_view_300s.png を描画・保存（加熱終了時）
     ↓
-断面図を描画・保存 (cross_section_distribution.png)
+top_view_600s.png を描画・保存（冷却終了時）
 ```
 
 ---
@@ -200,4 +205,3 @@ for s in range(Nt):
 | `matplotlib` | グラフ描画（Agg バックエンド） |
 | `scipy.sparse` | 疎行列（lil_matrix → CSR 変換） |
 | `scipy.sparse.linalg.factorized` | LU 分解（1 回だけ分解、繰り返し求解） |
-| `scipy.interpolate.RegularGridInterpolator` | 2D 格子上の双線形補間 |
