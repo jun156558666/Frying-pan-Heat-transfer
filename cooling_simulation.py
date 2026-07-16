@@ -3,10 +3,8 @@
   加熱フェーズ: t = 0   ~ 300 s（バーナー加熱 q_s = 15000 W/m²）
   冷却フェーズ: t = 300 ~ 600 s（加熱なし、自然対流のみ）
 出力:
-  top_view_300s.png        — 上面視 t=300s（加熱終了時）
-  top_view_600s.png        — 上面視 t=600s（冷却終了時）
-  cross_section_300s.png   — 断面図 t=300s
-  cross_section_600s.png   — 断面図 t=600s
+  top_view_300s.png  — 上面視 t=300s（加熱終了時）
+  top_view_600s.png  — 上面視 t=600s（冷却終了時）
 """
 
 import sys, io
@@ -18,7 +16,6 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import factorized
-from scipy.interpolate import RegularGridInterpolator
 
 plt.rcParams['font.family'] = 'Meiryo'
 
@@ -164,11 +161,11 @@ def run_transient(k, rho, c, h_eff, T_eff):
         T_fin = solve_fin(bf)
 
         if s == Nt_heat - 1:   # t = 300 s
-            T_field = T_2D.reshape(Ny, Nx) - 273.15
-            snap[300] = (T_field[-1, :].copy(), (T_fin - 273.15).copy(), T_field.copy())
+            T_top = (T_2D.reshape(Ny, Nx) - 273.15)[-1, :]
+            snap[300] = (T_top.copy(), (T_fin - 273.15).copy())
 
-    T_field = T_2D.reshape(Ny, Nx) - 273.15
-    snap[600] = (T_field[-1, :].copy(), (T_fin - 273.15).copy(), T_field.copy())
+    T_top = (T_2D.reshape(Ny, Nx) - 273.15)[-1, :]
+    snap[600] = (T_top.copy(), (T_fin - 273.15).copy())
     return snap
 
 # ============================================================
@@ -184,7 +181,7 @@ for cond in conditions:
         print(f"  {name} / {cond} ...", end=' ', flush=True)
         snap = run_transient(k, rho, c, h_eff, T_eff)
         results[(cond, name)] = snap
-        for t_s, (T_top, T_fin, _) in snap.items():
+        for t_s, (T_top, T_fin) in snap.items():
             Tmax = max(T_top.max(), T_fin.max())
             Tmin = min(T_top.min(), float(T_fin[-1]))
             print(f"t={t_s}s: 最高{Tmax:.1f}°C 最低{Tmin:.1f}°C", end='  ')
@@ -210,17 +207,6 @@ handle_mask = ((x_fin_comp >= 0) & (x_fin_comp <= L_h)
 pan_only    = pan_mask & ~handle_mask
 EXTENT_TV   = [x_min_mm, x_max_mm, -y_lim_mm, y_lim_mm]
 
-Nx_cs, Ny_cs = 800, 350
-y_cs_max_mm  = d_h/2 * 1000
-x_cs_mm = np.linspace(-L*1000, (L+L_h)*1000, Nx_cs)
-y_cs_mm = np.linspace(0, y_cs_max_mm, Ny_cs)
-X_cs, Y_cs = np.meshgrid(x_cs_mm, y_cs_mm)
-x_cs_m = X_cs / 1000
-y_cs_m = Y_cs / 1000
-pan_cs = (np.abs(x_cs_m) <= L) & (y_cs_m >= 0) & (y_cs_m <= H)
-fin_cs = (x_cs_m >= L) & (x_cs_m <= L+L_h) & (y_cs_m <= d_h/2)
-EXTENT_CS = [x_cs_mm[0], x_cs_mm[-1], y_cs_mm[0], y_cs_mm[-1]]
-
 BASE   = r'C:\Users\jun1029\claude code\大学\３年\固体力学'
 PHASES = {300: '加熱終了（バーナー ON）', 600: '冷却終了（バーナー OFF）'}
 
@@ -232,7 +218,7 @@ def plot_top_view(t_snap):
     plt.subplots_adjust(hspace=0.50, wspace=0.30)
     for row, cond in enumerate(conditions):
         for col, name in enumerate(materials):
-            T_top_C, T_fin_C, _ = results[(cond, name)][t_snap]
+            T_top_C, T_fin_C = results[(cond, name)][t_snap]
             T_tip_C   = float(T_fin_C[-1])
             T_all_max = max(T_top_C.max(), T_fin_C.max())
             T_all_min = min(T_top_C.min(), T_tip_C)
@@ -270,60 +256,7 @@ def plot_top_view(t_snap):
     print(f"保存: {out}")
 
 # ============================================================
-# 7. 断面図
-# ============================================================
-def plot_cross_section(t_snap):
-    fig, axes = plt.subplots(2, 5, figsize=(28, 9))
-    plt.subplots_adjust(hspace=0.55, wspace=0.30)
-    for row, cond in enumerate(conditions):
-        for col, name in enumerate(materials):
-            T_top_C, T_fin_C, T_field_C = results[(cond, name)][t_snap]
-            T_tip_C   = float(T_fin_C[-1])
-            T_all_max = max(T_top_C.max(), T_fin_C.max())
-            T_all_min = min(T_field_C.min(), T_tip_C)
-
-            T_cs = np.full((Ny_cs, Nx_cs), np.nan)
-            interp_fn = RegularGridInterpolator(
-                (y_arr, x_arr), T_field_C,
-                method='linear', bounds_error=False, fill_value=np.nan
-            )
-            pts = np.stack([y_cs_m[pan_cs], np.abs(x_cs_m[pan_cs])], axis=1)
-            T_cs[pan_cs] = interp_fn(pts)
-            T_cs[fin_cs] = np.interp(x_cs_m[fin_cs] - L, x_fin_arr, T_fin_C)
-
-            ax = axes[row, col]
-            im = ax.imshow(T_cs, extent=EXTENT_CS, origin='lower',
-                           cmap='jet', aspect='auto',
-                           vmin=T_all_min, vmax=T_all_max)
-            cbar = plt.colorbar(im, ax=ax, pad=0.02, shrink=0.80, aspect=20)
-            cbar.set_label('°C', fontsize=7)
-            cbar.ax.tick_params(labelsize=6)
-            ax.axvline( R_b*1000, color='white', ls='--', lw=1.0, alpha=0.8)
-            ax.axvline(-R_b*1000, color='white', ls='--', lw=1.0, alpha=0.8)
-            ax.axvline( L*1000,   color='white', ls='-',  lw=0.8, alpha=0.5)
-            ax.axvline(-L*1000,   color='white', ls='-',  lw=0.8, alpha=0.5)
-            ax.axhline(H*1000,    color='white', ls=':',  lw=1.0,
-                       xmin=0, xmax=(2*L*1000)/(x_cs_mm[-1]-x_cs_mm[0]))
-            ax.set_xlabel('x [mm]（中心→縁→持ち手）', fontsize=7)
-            ax.set_ylabel('y [mm]（厚さ / 半径）', fontsize=7)
-            ax.tick_params(labelsize=6)
-            ax.set_title(
-                f'{name} | {cond}\n最高 {T_all_max:.1f}°C  最低 {T_all_min:.1f}°C',
-                fontsize=8.5
-            )
-    plt.suptitle(
-        f'フライパン y=0 断面図  t = {t_snap} s  {PHASES[t_snap]}\n'
-        f'q_s = {q_s:.0f} W/m²  R_b = {R_b*1000:.0f} mm  '
-        f'パン板: H={H*1000:.0f}mm  フィン: d={d_h*1000:.0f}mm',
-        fontsize=12
-    )
-    out = fr'{BASE}\cross_section_{t_snap}s.png'
-    plt.savefig(out, dpi=150, bbox_inches='tight'); plt.close()
-    print(f"保存: {out}")
-
-# ============================================================
-# 8. 出力（t=300s, t=600s）
+# 7. 出力（t=300s, t=600s）
 # ============================================================
 for t_snap in [300, 600]:
     plot_top_view(t_snap)
-    plot_cross_section(t_snap)
