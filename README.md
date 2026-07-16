@@ -104,7 +104,7 @@ $$\frac{T^{n+1} - T^n}{\Delta t} = \mathcal{L}(T^{n+1}) + f$$
 | i = 0, i = Nx-1（左右端） | 対称 BC（零勾配）：dT/dx = 0 |
 | 内部節点 | 標準的な 2D FDM ステンシル |
 
-**内部節点の差分式**（$\rho c \dot{T} = k \nabla^2 T$）：
+**内部節点の差分式** ($\rho c \dot{T} = k \nabla^2 T$)：
 
 $$\begin{aligned}
 &\frac{\rho c}{\Delta t} T_{i,j}^{n+1} + \frac{2k}{\Delta x^2} T_{i,j}^{n+1} + \frac{2k}{\Delta y^2} T_{i,j}^{n+1} \\
